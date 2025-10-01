@@ -20,6 +20,13 @@ class Config:
     twitter_username: str = ""
     twitter_password: str = ""
     
+    # Proxy Configuration
+    proxy_host: str = ""
+    proxy_port: int = 0
+    proxy_username: str = ""
+    proxy_password: str = ""
+    proxy_enabled: bool = False
+    
     # Rate Limiting
     max_concurrent_downloads: int = 3
     scraper_delay: float = 1.0
@@ -62,6 +69,13 @@ class Config:
             "openai_api_key": os.getenv("OPENAI_API_KEY", ""),
             "twitter_username": os.getenv("TWITTER_USERNAME", ""),
             "twitter_password": os.getenv("TWITTER_PASSWORD", ""),
+            
+            # Proxy configuration
+            "proxy_host": os.getenv("PROXY_HOST", ""),
+            "proxy_port": int(os.getenv("PROXY_PORT", "0")),
+            "proxy_username": os.getenv("PROXY_USERNAME", ""),
+            "proxy_password": os.getenv("PROXY_PASSWORD", ""),
+            "proxy_enabled": os.getenv("PROXY_ENABLED", "false").lower() == "true",
             
             # Rate limiting
             "max_concurrent_downloads": int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "3")),
@@ -110,6 +124,27 @@ class Config:
         
         if self.vision_rate_limit < 1:
             raise ValueError("VISION_RATE_LIMIT must be >= 1")
+    
+    def get_proxy_dict(self) -> Dict[str, Any]:
+        """Get proxy configuration as a dictionary."""
+        return {
+            'enabled': self.proxy_enabled,
+            'host': self.proxy_host,
+            'port': self.proxy_port,
+            'username': self.proxy_username,
+            'password': self.proxy_password,
+        }
+    
+    def get_proxy_config(self) -> Optional[Dict[str, str]]:
+        """Get proxy configuration for requests/httpx."""
+        if not self.proxy_enabled or not self.proxy_host:
+            return None
+            
+        proxy_url = f"http://{self.proxy_username}:{self.proxy_password}@{self.proxy_host}:{self.proxy_port}"
+        return {
+            "http://": proxy_url,
+            "https://": proxy_url
+        }
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary."""

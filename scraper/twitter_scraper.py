@@ -10,8 +10,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any, Optional, AsyncIterator
 from urllib.parse import urlparse, parse_qs
+import random
 
 import aiohttp
+import httpx
 from twikit import Client
 from twikit.errors import TooManyRequests, Unauthorized
 
@@ -30,18 +32,77 @@ class TwitterScraper:
         password: Optional[str] = None,
         cache_dir: str = "cache",
         rate_limit_delay: float = 1.0,
+        proxy_config: Optional[Dict[str, Any]] = None,
+        max_retries: int = 3,
+        retry_delay: float = 2.0,
     ):
         self.username = username
         self.password = password
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
         
+        self.proxy_config = proxy_config
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+        
+        # Initialize client with proxy if available
         self.client = Client('en-US')
+        if proxy_config:
+            # Set proxy for twikit client
+            self._setup_proxy()
+            
         self.rate_limiter = RateLimiter(max_calls=50, time_window=900)  # 50 calls per 15 min
         self.session_file = self.cache_dir / 'twitter_session.json'
         
         # Initialize client
         self._authenticated = False
+        self.username = username
+        self.password = password
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(exist_ok=True)
+        
+        # Proxy configuration
+        self.proxy_config = proxy_config or {}
+        self.proxy_enabled = self.proxy_config.get('enabled', False)
+        
+        # Setup client with proxy if configured
+        self.client = Client('en-US')
+        if self.proxy_enabled:
+            self._setup_proxy()
+        
+        self.rate_limiter = RateLimiter(max_calls=50, time_window=900)  # 50 calls per 15 min
+        self.session_file = self.cache_dir / 'twitter_session.json'
+        
+        # Initialize client
+        self._authenticated = False
+    
+    def _setup_proxy(self):
+        """Setup proxy configuration for the client."""
+        if not self.proxy_config.get('enabled', False):
+            return
+        
+        self.proxy_url = f"http://{self.proxy_config['username']}:{self.proxy_config['password']}@{self.proxy_config['host']}:{self.proxy_config['port']}"
+        
+        # Store proxy config for aiohttp requests
+        self.proxy_auth = aiohttp.BasicAuth(
+            self.proxy_config['username'], 
+            self.proxy_config['password']
+        )
+        logger.info(f"Configured proxy: {self.proxy_config['host']}:{self.proxy_config['port']}")
+    
+    async def _retry_with_backoff(self, func, max_retries: int = 3, base_delay: float = 1.0):
+        """Execute function with exponential backoff retry logic."""
+        for attempt in range(max_retries):
+            try:
+                return await func()
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    logger.error(f"Failed after {max_retries} attempts: {e}")
+                    raise
+                
+                delay = base_delay * (2 ** attempt)
+                logger.warning(f"Attempt {attempt + 1} failed: {e}. Retrying in {delay}s...")
+                await asyncio.sleep(delay)
     
     async def authenticate(self) -> bool:
         """Authenticate with Twitter/X."""
@@ -105,8 +166,12 @@ class TwitterScraper:
             List of TweetData objects
         """
         
-        if not self._authenticated:
-            await self.authenticate()
+        # Try authentication if credentials provided, but continue without if not available
+        if self.username and self.password and not self._authenticated:
+            try:
+                await self.authenticate()
+            except Exception as e:
+                logger.warning(f"Authentication failed, continuing without: {e}")
         
         tweets = []
         
@@ -118,15 +183,20 @@ class TwitterScraper:
             
             logger.info(f"Searching tweets with query: {video_query}")
             
-            # Rate limit
-            await self.rate_limiter.acquire()
+            # Define search function for retry logic
+            async def perform_search():
+                # Rate limit
+                await self.rate_limiter.acquire()
+                
+                # Search tweets with retry logic for proxy downtimes
+                return await self.client.search_tweet(
+                    query=video_query,
+                    product='Latest',  # or 'Top' for top tweets
+                    count=max_results
+                )
             
-            # Search tweets
-            search_results = await self.client.search_tweet(
-                query=video_query,
-                product='Latest',  # or 'Top' for top tweets
-                count=max_results
-            )
+            # Execute search with retry logic
+            search_results = await self._retry_with_backoff(perform_search, max_retries=3)
             
             for tweet in search_results:
                 tweet_data = self._parse_tweet(tweet)

@@ -105,6 +105,7 @@ class TwitterClipPipeline:
             password=self.config.twitter_password,
             cache_dir=self.config.cache_dir,
             rate_limit_delay=self.config.scraper_delay,
+            proxy_config=self.config.get_proxy_dict(),
         )
         
         # Video downloader

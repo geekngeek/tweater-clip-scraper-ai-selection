@@ -4,12 +4,13 @@ A Python tool that scrapes Twitter for video content, filters candidates using A
 
 ## Features
 
-- 🐦 Twitter/X scraping using twikit (no API keys required)
-- 🤖 AI-powered text filtering and ranking
+- 🐦 Twitter/X scraping with rotating proxy support (no Twitter account needed)
+- 🤖 AI-powered text filtering and ranking  
 - 👁️ Video analysis using OpenAI Vision
 - 🎬 Precise timestamp identification for video clips
 - 📊 Comprehensive tracing and confidence scoring
 - 🔧 Modular architecture with testable components
+- 🔄 Automatic retry logic for proxy downtime handling
 
 ## Architecture
 
@@ -71,8 +72,8 @@ pip install -r requirements.txt
 2. **Set environment variables:**
 ```bash
 export OPENAI_API_KEY="your_openai_api_key"
-export TWITTER_USERNAME="your_twitter_username"  # Optional
-export TWITTER_PASSWORD="your_twitter_password"  # Optional
+# Proxy is already configured in .env file (recommended for reliability)
+# Twitter credentials are optional and not needed when using proxy
 ```
 
 3. **Run basic tests:**
