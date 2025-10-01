@@ -79,11 +79,9 @@ class TwitterClipPipeline:
         self,
         config: Config,
         pipeline_config: Optional[PipelineConfig] = None,
-        dry_run: bool = False,
     ):
         self.config = config
         self.pipeline_config = pipeline_config or PipelineConfig()
-        self.dry_run = dry_run
         
         # Create output directories
         create_output_structure(config.output_dir)
@@ -212,7 +210,6 @@ class TwitterClipPipeline:
                 "steps_completed": [],
                 "errors": [],
                 "protection_status": "none",
-                "using_mock_data": False,
             }
         }
         
@@ -264,10 +261,6 @@ class TwitterClipPipeline:
         try:
             self._update_progress(state, "🔍 Generating search queries", 5)
             
-            if self.dry_run:
-                state["search_queries"] = [state["description"]]
-                return state
-            
             # Use text filter to expand queries
             expansion = await self.text_filter.expand_query(state["description"])
             
@@ -302,30 +295,6 @@ class TwitterClipPipeline:
         try:
             self._update_progress(state, "🐦 Scraping Twitter", 15)
             
-            if self.dry_run:
-                # Create mock tweets for dry run
-                mock_tweets = []
-                for i in range(min(5, state["max_candidates"])):
-                    tweet = TweetData(
-                        tweet_id=f"mock_{i}",
-                        url=f"https://twitter.com/user/status/mock_{i}",
-                        text=f"Mock tweet {i}: {state['description']}",
-                        author_handle=f"user_{i}",
-                        author_name=f"User {i}",
-                        created_at=datetime.now(),
-                        retweet_count=10,
-                        like_count=50,
-                        reply_count=5,
-                        quote_count=2,
-                        video_url=f"https://video.twitter.com/mock_{i}.mp4",
-                        video_duration=60.0,
-                        has_media=True,
-                    )
-                    mock_tweets.append(tweet)
-                
-                state["scraped_tweets"] = mock_tweets
-                return state
-            
             all_tweets = []
             
             # Import protection handler for status checking
@@ -355,9 +324,6 @@ class TwitterClipPipeline:
                     # Log enhanced protection status on error
                     protection_level = protection_handler.protection_level.value
                     state["trace_info"]["protection_status"] = protection_level
-                    if protection_level in ["heavy", "captcha"]:
-                        logger.warning(f"High protection level detected: {protection_level}")
-                        state["trace_info"]["using_mock_data"] = True
             
             # Remove duplicates by tweet ID
             unique_tweets = {}
@@ -381,8 +347,8 @@ class TwitterClipPipeline:
         try:
             self._update_progress(state, "📝 Filtering with AI", 30)
             
-            if self.dry_run or not state["scraped_tweets"]:
-                state["filtered_candidates"] = state["scraped_tweets"][:5]
+            if not state["scraped_tweets"]:
+                state["filtered_candidates"] = []
                 return state
             
             # Filter tweets using AI
@@ -446,11 +412,8 @@ class TwitterClipPipeline:
         try:
             self._update_progress(state, "📥 Downloading videos", 55)
             
-            if self.dry_run or not state["ranked_candidates"]:
-                state["downloaded_videos"] = [
-                    {"filepath": f"mock_video_{i}.mp4", "tweet_id": f"mock_{i}"}
-                    for i in range(min(3, len(state["ranked_candidates"])))
-                ]
+            if not state["ranked_candidates"]:
+                state["downloaded_videos"] = []
                 return state
             
             # Extract video URLs and tweet IDs
@@ -496,8 +459,7 @@ class TwitterClipPipeline:
         try:
             self._update_progress(state, "👁️ Analyzing videos with AI", 75)
             
-            if self.dry_run or not state["downloaded_videos"]:
-                # Mock analysis results
+            if not state["downloaded_videos"]:
                 state["analyzed_videos"] = []
                 return state
             
@@ -546,18 +508,8 @@ class TwitterClipPipeline:
         try:
             self._update_progress(state, "🎯 Selecting best clip", 90)
             
-            if self.dry_run or not state["analyzed_videos"]:
-                # Mock selection
-                state["final_result"] = {
-                    "tweet_url": "https://twitter.com/user/status/mock_1",
-                    "video_url": "https://video.twitter.com/mock_1.mp4",
-                    "start_time_s": 10.0,
-                    "end_time_s": 22.0,
-                    "confidence": 0.85,
-                    "reason": "Mock selection for dry run",
-                    "alternates": [],
-                    "trace": state["trace_info"],
-                }
+            if not state["analyzed_videos"]:
+                state["final_result"] = None
                 return state
             
             # Select best clip
@@ -609,7 +561,7 @@ class TwitterClipPipeline:
                 })
             
             # Cleanup if requested
-            if self.pipeline_config.cleanup_downloads and not self.dry_run:
+            if self.pipeline_config.cleanup_downloads:
                 try:
                     self.downloader.cleanup_downloads(keep_recent_hours=1)
                 except Exception as e:

@@ -65,11 +65,6 @@ console = Console()
     is_flag=True,
     help="Enable verbose logging",
 )
-@click.option(
-    "--dry-run",
-    is_flag=True,
-    help="Perform a dry run without making API calls",
-)
 def main(
     description: str,
     duration: int,
@@ -77,7 +72,6 @@ def main(
     output_file: str,
     config_file: str,
     verbose: bool,
-    dry_run: bool,
 ) -> None:
     """
     Twitter Clip Scraper with AI Selection
@@ -122,9 +116,6 @@ def main(
     console.print(f"Max candidates: {max_candidates}")
     console.print(f"Output: {output_file}")
     
-    if dry_run:
-        console.print("[yellow]📝 DRY RUN MODE - No API calls will be made[/yellow]")
-    
     # Run the pipeline
     asyncio.run(
         run_pipeline(
@@ -133,7 +124,6 @@ def main(
             max_candidates=max_candidates,
             output_file=output_file,
             config=config,
-            dry_run=dry_run,
         )
     )
 
@@ -144,13 +134,12 @@ async def run_pipeline(
     max_candidates: int,
     output_file: Path,
     config: Config,
-    dry_run: bool = False,
 ) -> None:
     """Run the complete Twitter clip scraping pipeline."""
     
     try:
         # Initialize pipeline
-        pipeline = TwitterClipPipeline(config=config, dry_run=dry_run)
+        pipeline = TwitterClipPipeline(config=config)
         
         # Create progress display
         with Progress(
@@ -199,7 +188,7 @@ def display_results(results: Dict[str, Any]) -> None:
     
     console.print("\n[bold cyan]📊 Results Summary[/bold cyan]")
     
-    if results.get("tweet_url"):
+    if results and results.get("tweet_url"):
         console.print(f"🐦 Tweet: {results['tweet_url']}")
         console.print(f"🎬 Video: {results['video_url']}")
         console.print(f"⏰ Clip: {results['start_time_s']:.1f}s - {results['end_time_s']:.1f}s")
@@ -214,7 +203,7 @@ def display_results(results: Dict[str, Any]) -> None:
         console.print("[yellow]⚠️  No matching clips found[/yellow]")
     
     # Display trace information
-    if results.get("trace"):
+    if results and results.get("trace"):
         trace = results["trace"]
         console.print("\n[bold blue]📈 Pipeline Trace[/bold blue]")
         console.print(f"Candidates considered: {trace.get('candidates_considered', 0)}")
@@ -225,13 +214,7 @@ def display_results(results: Dict[str, Any]) -> None:
         # Display protection status
         protection_status = trace.get('protection_status', 'none')
         if protection_status != 'none':
-            if protection_status in ['heavy', 'captcha']:
-                console.print(f"🛡️  Twitter protection: [red]{protection_status}[/red] (using mock data)")
-            else:
-                console.print(f"🛡️  Twitter protection: [yellow]{protection_status}[/yellow]")
-        
-        if trace.get('using_mock_data'):
-            console.print("[yellow]⚠️  Results include simulated data due to Twitter blocking[/yellow]")
+            console.print(f"🛡️  Twitter protection: [yellow]{protection_status}[/yellow]")
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ from twikit.errors import TooManyRequests, Unauthorized
 
 from utils.helpers import TweetData, RateLimiter, clean_text
 from utils.logging import get_logger
-from utils.anti_bot_protection import protection_handler, mock_provider
+from utils.anti_bot_protection import protection_handler, ProtectionLevel
 
 logger = get_logger(__name__)
 
@@ -176,11 +176,6 @@ class TwitterScraper:
         
         tweets = []
         
-        # Check if we should use mock data due to heavy protection
-        if mock_provider.should_use_mock_data(protection_handler):
-            logger.warning(f"Twitter protection level high, using mock data for query: {query}")
-            return mock_provider.generate_mock_tweets(query, max_results)
-        
         try:
             # Add video filter to search query
             video_query = f"{query} has:videos"
@@ -244,12 +239,7 @@ class TwitterScraper:
                 
             protection_handler.update_status(status_code, error_text)
             
-            # Check if we should use mock data based on protection level
-            if protection_handler.protection_level in [ProtectionLevel.HEAVY, ProtectionLevel.CAPTCHA]:
-                logger.warning(f"High protection level detected, using mock data for query: {query}")
-                return mock_provider.generate_mock_tweets(query, max_results)
-            
-            # For lower protection levels, re-raise the error
+            # Re-raise the error
             raise
         
         return tweets

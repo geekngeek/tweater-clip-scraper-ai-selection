@@ -10,9 +10,13 @@ from dataclasses import dataclass
 from enum import Enum
 
 from utils.logging import get_logger
-from utils.helpers import TweetData
 
 logger = get_logger(__name__)
+
+# Import TweetData here to avoid circular imports
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from utils.helpers import TweetData
 
 
 class ProtectionLevel(Enum):
@@ -174,41 +178,5 @@ class AntiProtectionHandler:
             raise e
 
 
-class MockDataProvider:
-    """Provides realistic mock data when Twitter is blocked."""
-    
-    @staticmethod
-    def generate_mock_tweets(query: str, count: int = 10) -> List[TweetData]:
-        """Generate realistic mock tweet data for testing."""
-        mock_tweets = []
-        
-        for i in range(count):
-            tweet_data = TweetData(
-                id=f"mock_{i+1}_{hash(query) % 10000}",
-                url=f"https://twitter.com/user{i+1}/status/mock_{i+1}",
-                text=f"Mock tweet about {query} with video content. This is a realistic example of what might be found.",
-                author=f"user{i+1}",
-                created_at=f"2024-10-01T{10+i:02d}:00:00Z",
-                like_count=random.randint(50, 5000),
-                retweet_count=random.randint(10, 1000),
-                reply_count=random.randint(5, 500),
-                video_urls=[f"https://video.twimg.com/ext_tw_video/{i+1}/mock_video.mp4"],
-                has_media=True
-            )
-            mock_tweets.append(tweet_data)
-        
-        logger.info(f"Generated {len(mock_tweets)} mock tweets for query: {query}")
-        return mock_tweets
-    
-    @staticmethod
-    def should_use_mock_data(protection_handler: AntiProtectionHandler) -> bool:
-        """Determine if we should use mock data instead of real requests."""
-        return (
-            protection_handler.status.level in [ProtectionLevel.HEAVY, ProtectionLevel.CAPTCHA] or
-            protection_handler.status.consecutive_failures >= 5
-        )
-
-
 # Global instance
 protection_handler = AntiProtectionHandler()
-mock_provider = MockDataProvider()
