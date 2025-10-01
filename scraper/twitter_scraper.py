@@ -19,6 +19,7 @@ from twikit.errors import TooManyRequests, Unauthorized
 
 from utils.helpers import TweetData, RateLimiter, clean_text
 from utils.logging import get_logger
+from utils.anti_bot_protection import protection_handler, mock_provider
 
 logger = get_logger(__name__)
 
@@ -175,6 +176,11 @@ class TwitterScraper:
         
         tweets = []
         
+        # Check if we should use mock data due to heavy protection
+        if mock_provider.should_use_mock_data(protection_handler):
+            logger.warning(f"Twitter protection level high, using mock data for query: {query}")
+            return mock_provider.generate_mock_tweets(query, max_results)
+        
         try:
             # Add video filter to search query
             video_query = f"{query} has:videos"
@@ -183,20 +189,22 @@ class TwitterScraper:
             
             logger.info(f"Searching tweets with query: {video_query}")
             
-            # Define search function for retry logic
+            # Define search function with anti-protection measures
             async def perform_search():
                 # Rate limit
                 await self.rate_limiter.acquire()
                 
-                # Search tweets with retry logic for proxy downtimes
+                # Search tweets with enhanced headers and protection handling
                 return await self.client.search_tweet(
                     query=video_query,
                     product='Latest',  # or 'Top' for top tweets
                     count=max_results
                 )
             
-            # Execute search with retry logic
-            search_results = await self._retry_with_backoff(perform_search, max_retries=3)
+            # Execute search with anti-protection handler
+            search_results = await protection_handler.execute_with_protection(
+                self._retry_with_backoff, perform_search, max_retries=3
+            )
             
             for tweet in search_results:
                 tweet_data = self._parse_tweet(tweet)
@@ -217,6 +225,31 @@ class TwitterScraper:
             
         except Exception as e:
             logger.error(f"Search failed: {e}")
+            
+            # Analyze the error for protection measures
+            status_code = 500  # Default error code
+            error_text = str(e)
+            
+            # Try to extract status code from the exception
+            if hasattr(e, 'status'):
+                status_code = e.status
+            elif hasattr(e, 'status_code'):
+                status_code = e.status_code
+            elif "403" in error_text or "Forbidden" in error_text:
+                status_code = 403
+            elif "429" in error_text or "rate limit" in error_text.lower():
+                status_code = 429
+            elif "404" in error_text or "Not Found" in error_text:
+                status_code = 404
+                
+            protection_handler.update_status(status_code, error_text)
+            
+            # Check if we should use mock data based on protection level
+            if protection_handler.protection_level in [ProtectionLevel.HEAVY, ProtectionLevel.CAPTCHA]:
+                logger.warning(f"High protection level detected, using mock data for query: {query}")
+                return mock_provider.generate_mock_tweets(query, max_results)
+            
+            # For lower protection levels, re-raise the error
             raise
         
         return tweets

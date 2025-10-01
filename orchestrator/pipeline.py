@@ -211,6 +211,8 @@ class TwitterClipPipeline:
                 "start_time": datetime.now().isoformat(),
                 "steps_completed": [],
                 "errors": [],
+                "protection_status": "none",
+                "using_mock_data": False,
             }
         }
         
@@ -326,6 +328,9 @@ class TwitterClipPipeline:
             
             all_tweets = []
             
+            # Import protection handler for status checking
+            from utils.anti_bot_protection import protection_handler, ProtectionLevel
+            
             # Scrape for each query
             for query in state["search_queries"]:
                 try:
@@ -337,9 +342,22 @@ class TwitterClipPipeline:
                     )
                     all_tweets.extend(tweets)
                     
+                    # Log protection status
+                    protection_level = protection_handler.protection_level.value
+                    if protection_level != "none":
+                        logger.info(f"Twitter protection level: {protection_level}")
+                        state["trace_info"]["protection_status"] = protection_level
+                    
                 except Exception as e:
                     logger.error(f"Scraping failed for query '{query}': {e}")
                     state["trace_info"]["errors"].append(f"Scraping '{query}': {e}")
+                    
+                    # Log enhanced protection status on error
+                    protection_level = protection_handler.protection_level.value
+                    state["trace_info"]["protection_status"] = protection_level
+                    if protection_level in ["heavy", "captcha"]:
+                        logger.warning(f"High protection level detected: {protection_level}")
+                        state["trace_info"]["using_mock_data"] = True
             
             # Remove duplicates by tweet ID
             unique_tweets = {}

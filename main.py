@@ -221,6 +221,17 @@ def display_results(results: Dict[str, Any]) -> None:
         console.print(f"Filtered by text: {trace.get('filtered_by_text', 0)}")
         console.print(f"Vision API calls: {trace.get('vision_calls', 0)}")
         console.print(f"Final choice rank: {trace.get('final_choice_rank', 'N/A')}")
+        
+        # Display protection status
+        protection_status = trace.get('protection_status', 'none')
+        if protection_status != 'none':
+            if protection_status in ['heavy', 'captcha']:
+                console.print(f"🛡️  Twitter protection: [red]{protection_status}[/red] (using mock data)")
+            else:
+                console.print(f"🛡️  Twitter protection: [yellow]{protection_status}[/yellow]")
+        
+        if trace.get('using_mock_data'):
+            console.print("[yellow]⚠️  Results include simulated data due to Twitter blocking[/yellow]")
 
 
 if __name__ == "__main__":
