@@ -1,0 +1,14 @@
+{
+  "sample_query": "AI and machine learning discussion",
+  "target_duration": 15.0,
+  "max_tweets": 20,
+  "sample_tweet_urls": [
+    "https://twitter.com/elonmusk/status/123456789",
+    "https://twitter.com/OpenAI/status/987654321",
+    "https://twitter.com/GoogleAI/status/456789123"
+  ],
+  "test_video_urls": [
+    "https://video.twitter.com/sample1.mp4",
+    "https://video.twitter.com/sample2.mp4"
+  ]
+}
